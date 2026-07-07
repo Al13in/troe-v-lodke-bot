@@ -11,22 +11,14 @@ public static class SolverOlesia
     {
         try
         {
-            string expr = input.Replace("=", "").Trim();
-            long result = EvalExpr(expr, out _);
+            // Убираем всё после = (включая "= ?", "= ?")
+            string expr = Regex.Replace(input, @"=.*$", "").Trim();
+            var tokens = Tokenize(expr);
+            int pos = 0;
+            long result = ParseAddSub(tokens, ref pos);
             return result.ToString();
         }
         catch { return "0"; }
-    }
-
-    // Рекурсивный парсер с поддержкой скобок, унарного минуса, +/-/*/%
-    private static long EvalExpr(string expr, out int consumed)
-    {
-        consumed = 0;
-        var tokens = Tokenize(expr);
-        int pos = 0;
-        long result = ParseAddSub(tokens, ref pos);
-        consumed = expr.Length;
-        return result;
     }
 
     private static long ParseAddSub(List<string> tokens, ref int pos)
@@ -62,10 +54,7 @@ public static class SolverOlesia
             pos++;
             return -ParsePrimary(tokens, ref pos);
         }
-        if (pos < tokens.Count && tokens[pos] == "+")
-        {
-            pos++;
-        }
+        if (pos < tokens.Count && tokens[pos] == "+") pos++;
         return ParsePrimary(tokens, ref pos);
     }
 
@@ -73,10 +62,9 @@ public static class SolverOlesia
     {
         if (pos < tokens.Count && tokens[pos] == "(")
         {
-            pos++; // skip '('
+            pos++;
             long val = ParseAddSub(tokens, ref pos);
-            if (pos < tokens.Count && tokens[pos] == ")")
-                pos++; // skip ')'
+            if (pos < tokens.Count && tokens[pos] == ")") pos++;
             return val;
         }
         return long.Parse(tokens[pos++]);
@@ -90,10 +78,34 @@ public static class SolverOlesia
         while (i < expr.Length)
         {
             char c = expr[i];
-            if (c == '(' || c == ')' || c == '+' || c == '-' || c == '*' || c == '/' || c == '%')
+            if (c == '(' || c == ')' || c == '*' || c == '/' || c == '%')
             {
                 tokens.Add(c.ToString());
                 i++;
+            }
+            else if (c == '+' || c == '-')
+            {
+                // Унарный если первый токен или после оператора/открывающей скобки
+                bool isUnary = tokens.Count == 0 ||
+                    tokens[tokens.Count - 1] == "+" ||
+                    tokens[tokens.Count - 1] == "-" ||
+                    tokens[tokens.Count - 1] == "*" ||
+                    tokens[tokens.Count - 1] == "/" ||
+                    tokens[tokens.Count - 1] == "%" ||
+                    tokens[tokens.Count - 1] == "(";
+                if (isUnary && i + 1 < expr.Length && char.IsDigit(expr[i + 1]))
+                {
+                    // склеиваем знак с числом
+                    int start = i;
+                    i++;
+                    while (i < expr.Length && char.IsDigit(expr[i])) i++;
+                    tokens.Add(expr.Substring(start, i - start));
+                }
+                else
+                {
+                    tokens.Add(c.ToString());
+                    i++;
+                }
             }
             else if (char.IsDigit(c))
             {
@@ -106,42 +118,48 @@ public static class SolverOlesia
         return tokens;
     }
 
-    // polynomial-root: решаем квадратное уравнение, возвращаем оба корня
+    // polynomial-root: решаем квадратное уравнение
     public static string SolvePolynomial(string input)
     {
         try
         {
-            // Нормализуем: убираем пробелы, знак = и правую часть
-            string s = Regex.Replace(input, @"\s+", "");
-            s = Regex.Replace(s, @"=.*$", ""); // убрать =0 и всё после
+            // Нормализуем пробелы
+            string s = input.Trim();
+            // Убираем правую часть = 0 (или = что угодно)
+            s = Regex.Replace(s, @"=.*$", "").Trim();
+            // Убираем все пробелы для упрощения разбора
+            s = s.Replace(" ", "");
+            // Добавляем явный + перед x если нет знака в начале
+            if (s.Length > 0 && s[0] != '+' && s[0] != '-') s = "+" + s;
 
             double a = 0, b = 0, c = 0;
 
-            // Ищем коэффициент a при x^2
-            var aMatch = Regex.Match(s, @"([+-]?(?:\d+\.?\d*|\.\d+)?)\*?x\^2");
-            if (aMatch.Success)
+            // Ищем все термы: знак + коэффициент + переменная (x^2, x, или константа)
+            var termRegex = new Regex(@"([+-]\d*\.?\d*)(\*?)([xX]\^2|[xX]|)");
+            var matches = termRegex.Matches(s);
+
+            foreach (Match m in matches)
             {
-                string av = aMatch.Groups[1].Value;
-                a = av == "" || av == "+" ? 1 : av == "-" ? -1
-                    : double.Parse(av, System.Globalization.CultureInfo.InvariantCulture);
+                string coefStr = m.Groups[1].Value;
+                string varPart = m.Groups[3].Value.ToLower();
+
+                if (string.IsNullOrEmpty(coefStr) && string.IsNullOrEmpty(varPart)) continue;
+
+                // Парсим коэффициент
+                double coef;
+                if (coefStr == "+" || coefStr == "") coef = 1;
+                else if (coefStr == "-") coef = -1;
+                else coef = double.Parse(coefStr, System.Globalization.CultureInfo.InvariantCulture);
+
+                if (varPart == "x^2") a += coef;
+                else if (varPart == "x") b += coef;
+                else if (!string.IsNullOrEmpty(m.Groups[1].Value) && string.IsNullOrEmpty(varPart))
+                    c += coef;
             }
 
-            // Ищем коэффициент b при x (не перед x^2)
-            // Удаляем x^2 часть перед поиском x
-            string noX2 = Regex.Replace(s, @"[+-]?(?:\d+\.?\d*|\.\d+)?\*?x\^2", "");
-            var bMatch = Regex.Match(noX2, @"([+-]?(?:\d+\.?\d*|\.\d+)?)\*?x");
-            if (bMatch.Success)
-            {
-                string bv = bMatch.Groups[1].Value;
-                b = bv == "" || bv == "+" ? 1 : bv == "-" ? -1
-                    : double.Parse(bv, System.Globalization.CultureInfo.InvariantCulture);
-            }
-
-            // Ищем свободный член c — последнее число без x
-            string noX = Regex.Replace(noX2, @"[+-]?(?:\d+\.?\d*|\.\d+)?\*?x", "");
-            var cMatch = Regex.Match(noX, @"([+-]?(?:\d+\.?\d*|\.\d+))");
-            if (cMatch.Success)
-                c = double.Parse(cMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            // Если a=0 и b=0 и c=0 — попробуем ещё раз с другим подходом
+            if (Math.Abs(a) < 1e-12 && Math.Abs(b) < 1e-12 && Math.Abs(c) < 1e-12)
+                return ParsePolynomialFallback(s);
 
             // Линейное уравнение
             if (Math.Abs(a) < 1e-12)
@@ -153,24 +171,63 @@ public static class SolverOlesia
 
             double disc = b * b - 4 * a * c;
             if (disc < -1e-9) return "no roots";
-            if (Math.Abs(disc) <= 1e-9)
-                return FormatRoot(-b / (2 * a));
+            if (Math.Abs(disc) <= 1e-9) return FormatRoot(-b / (2 * a));
 
             double x1 = (-b + Math.Sqrt(disc)) / (2 * a);
             double x2 = (-b - Math.Sqrt(disc)) / (2 * a);
-            // Возвращаем в порядке убывания (x1 >= x2)
-            if (x1 >= x2)
-                return $"{FormatRoot(x1)} {FormatRoot(x2)}";
-            else
-                return $"{FormatRoot(x2)} {FormatRoot(x1)}";
+            if (x1 >= x2) return $"{FormatRoot(x1)} {FormatRoot(x2)}";
+            else return $"{FormatRoot(x2)} {FormatRoot(x1)}";
         }
         catch { return "no roots"; }
     }
 
+    private static string ParsePolynomialFallback(string s)
+    {
+        // Запасной метод — явный поиск каждого терма по regex
+        double a = 0, b = 0, c = 0;
+
+        var aMatch = Regex.Match(s, @"([+-]?\d+\.?\d*)[*]?[xX]\^2");
+        if (aMatch.Success)
+        {
+            string v = aMatch.Groups[1].Value;
+            a = (v == "+" || v == "") ? 1 : v == "-" ? -1 : double.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        string noX2 = Regex.Replace(s, @"[+-]?\d*\.?\d*[*]?[xX]\^2", "");
+        var bMatch = Regex.Match(noX2, @"([+-]?\d*\.?\d*)[*]?[xX](?!\^)");
+        if (bMatch.Success)
+        {
+            string v = bMatch.Groups[1].Value;
+            b = (v == "+" || v == "") ? 1 : v == "-" ? -1 : double.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        string noX = Regex.Replace(noX2, @"[+-]?\d*\.?\d*[*]?[xX](?!\^)", "");
+        var cMatch = Regex.Match(noX, @"([+-]?\d+\.?\d*)");
+        if (cMatch.Success)
+            c = double.Parse(cMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+
+        if (Math.Abs(a) < 1e-12)
+        {
+            if (Math.Abs(b) < 1e-12) return "no roots";
+            return FormatRoot(-c / b);
+        }
+
+        double disc = b * b - 4 * a * c;
+        if (disc < -1e-9) return "no roots";
+        if (Math.Abs(disc) <= 1e-9) return FormatRoot(-b / (2 * a));
+
+        double x1 = (-b + Math.Sqrt(disc)) / (2 * a);
+        double x2 = (-b - Math.Sqrt(disc)) / (2 * a);
+        if (x1 >= x2) return $"{FormatRoot(x1)} {FormatRoot(x2)}";
+        return $"{FormatRoot(x2)} {FormatRoot(x1)}";
+    }
+
     private static string FormatRoot(double x)
     {
-        // Округляем до 2 знаков, убираем лишние нули
         double rounded = Math.Round(x, 2);
+        // Если целое — без десятичной точки
+        if (Math.Abs(rounded - Math.Round(rounded)) < 1e-9)
+            return ((long)Math.Round(rounded)).ToString();
         return rounded.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
     }
 }
