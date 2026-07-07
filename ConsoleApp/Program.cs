@@ -52,22 +52,23 @@ foreach (var taskType in taskTypes)
             string answer = Solver.Solve(newTask);
             var updatedTask = await challengeClient.CheckTaskAnswerAsync(newTask.Id, answer);
 
-            bool ok = updatedTask.Status?.ToString() == "1" || updatedTask.Status?.ToString() == "Success";
+            bool ok = (int)updatedTask.Status == 1;
             if (ok) successCount++; else failCount++;
 
-            // Показываем вопрос и ответ для диагностики
             string icon = ok ? "[OK]" : "[FAIL]";
-            Console.WriteLine($"{icon} [{taskType}] Q: {newTask.Question?.Replace("\n", " ")?.Substring(0, Math.Min(60, newTask.Question?.Length ?? 0))} | A: {answer} | Status: {updatedTask.Status}");
+            string q = newTask.Question ?? "";
+            string qShort = q.Replace("\n", " ").Replace("\r", "");
+            if (qShort.Length > 60) qShort = qShort.Substring(0, 60);
+            Console.WriteLine($"{icon} [{taskType}] Q: {qShort} | A: {answer} | Status: {(int)updatedTask.Status}");
 
             errorsInARow = 0;
             await Task.Delay(300);
         }
         catch (Exception ex)
         {
-            // HTTP 400 — задачи кончились
             if (ex is ErrorResponseException apiEx && (int)apiEx.StatusCode == 400)
             {
-                Console.WriteLine($"Задачи {taskType} закончились (исчерпаны). OK={successCount} FAIL={failCount}");
+                Console.WriteLine($"Задачи {taskType} исчерпаны. OK={successCount} FAIL={failCount}");
                 break;
             }
 
