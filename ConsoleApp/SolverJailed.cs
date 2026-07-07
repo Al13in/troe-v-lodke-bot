@@ -1,50 +1,76 @@
 using System;
+using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace ConsoleApp;
 
-public static class SolverOlesia
+public static class SolverJailed
 {
-    public static string SolveSimpleMath(string input)
+    // Задача cypher: вопрос содержит #reversed#текст#reversed#
+    // Нужно извлечь текст между маркерами и вернуть его в обратном порядке
+    public static string SolveCypher(string input)
     {
         try
         {
-            string clean = input.Replace("=", "").Trim();
-            var match = Regex.Match(clean, @"(-?\d+)\s*([\+\-\*\/])\s*(-?\d+)");
-            if (!match.Success) return "0";
-            long num1 = long.Parse(match.Groups[1].Value);
-            string op = match.Groups[2].Value;
-            long num2 = long.Parse(match.Groups[3].Value);
-            return op switch
+            var match = Regex.Match(input, @"#reversed#(.+?)#reversed#");
+            if (match.Success)
             {
-                "+" => (num1 + num2).ToString(),
-                "-" => (num1 - num2).ToString(),
-                "*" => (num1 * num2).ToString(),
-                "/" => (num1 / num2).ToString(),
-                _ => "0"
-            };
+                string text = match.Groups[1].Value;
+                return new string(text.Reverse().ToArray());
+            }
+            // Если маркер только один — разворачиваем всё что после него
+            var simpleMatch = Regex.Match(input, @"#reversed#(.+)");
+            if (simpleMatch.Success)
+            {
+                string text = simpleMatch.Groups[1].Value.Trim();
+                return new string(text.Reverse().ToArray());
+            }
+            return new string(input.Reverse().ToArray());
         }
-        catch { return "0"; }
+        catch { return ""; }
     }
 
-    public static string SolvePolynomial(string input)
+    // Задача steganography: вопрос начинается со строк с римскими цифрами
+    // Каждая строка — римская цифра = номер буквы в алфавите (I=A, II=B, ...)
+    public static string SolveSteganography(string input)
     {
         try
         {
-            string s = input.Replace(" ", "");
-            double a = 0, b = 0, c = 0;
-            var aMatch = Regex.Match(s, @"([+-]?\d?\.?\d*)\*?x\^2");
-            if (aMatch.Success) a = string.IsNullOrEmpty(aMatch.Groups[1].Value) || aMatch.Groups[1].Value == "+" ? 1 : (aMatch.Groups[1].Value == "-" ? -1 : double.Parse(aMatch.Groups[1].Value));
-            var bMatch = Regex.Match(s, @"([+-]?\d?\.?\d*)\*?x(?! \^2)");
-            if (bMatch.Success) b = string.IsNullOrEmpty(bMatch.Groups[1].Value) || bMatch.Groups[1].Value == "+" ? 1 : (bMatch.Groups[1].Value == "-" ? -1 : double.Parse(bMatch.Groups[1].Value));
-            var cMatch = Regex.Match(s, @"([+-]?\d+\.?\d*)$");
-            if (cMatch.Success) c = double.Parse(cMatch.Groups[1].Value);
-            if (a == 0 && b != 0) return Math.Round(-c / b, 3).ToString().Replace(",", ".");
-            double d = b * b - 4 * a * c;
-            if (d < 0) return "no roots";
-            double x1 = (-b + Math.Sqrt(d)) / (2 * a);
-            return Math.Round(x1, 3).ToString().Replace(",", ".");
+            var lines = input.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+            foreach (var line in lines)
+            {
+                string trimmed = line.Trim();
+                // Пропускаем строки, которые не являются римскими цифрами
+                if (!Regex.IsMatch(trimmed, @"^[IVXLCDMivxlcdm]+$"))
+                    break;
+                int value = RomanToInt(trimmed.ToUpper());
+                if (value >= 1 && value <= 26)
+                    sb.Append((char)('A' + value - 1));
+            }
+            return sb.ToString();
         }
-        catch { return "no roots"; }
+        catch { return ""; }
+    }
+
+    private static int RomanToInt(string s)
+    {
+        var map = new System.Collections.Generic.Dictionary<char, int>
+        {
+            {'I', 1}, {'V', 5}, {'X', 10}, {'L', 50},
+            {'C', 100}, {'D', 500}, {'M', 1000}
+        };
+        int result = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            int cur = map[s[i]];
+            int next = (i + 1 < s.Length) ? map[s[i + 1]] : 0;
+            if (cur < next)
+                result -= cur;
+            else
+                result += cur;
+        }
+        return result;
     }
 }
