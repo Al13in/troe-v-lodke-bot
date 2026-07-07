@@ -1,7 +1,7 @@
 from API import Client, TaskStatus, Task
 
 team_secret = ""
-challenge_id = "projects-course"
+challenge_id = "git-course"
 
 client = Client(team_secret, challenge_id=challenge_id)
 
