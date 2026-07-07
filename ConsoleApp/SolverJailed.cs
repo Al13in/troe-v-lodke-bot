@@ -7,23 +7,16 @@ namespace ConsoleApp;
 
 public static class SolverJailed
 {
-    // Задача cypher: вопрос содержит #reversed#текст#reversed#
-    // Нужно извлечь текст между маркерами и вернуть его в обратном порядке
+    // cypher: вопрос #reversed#текст
+    // всё что идёт после #reversed# — перевернуть, ответ включает # в начале
     public static string SolveCypher(string input)
     {
         try
         {
-            var match = Regex.Match(input, @"#reversed#(.+?)#reversed#");
+            var match = Regex.Match(input, @"#reversed#(.+)", RegexOptions.Singleline);
             if (match.Success)
             {
-                string text = match.Groups[1].Value;
-                return new string(text.Reverse().ToArray());
-            }
-            // Если маркер только один — разворачиваем всё что после него
-            var simpleMatch = Regex.Match(input, @"#reversed#(.+)");
-            if (simpleMatch.Success)
-            {
-                string text = simpleMatch.Groups[1].Value.Trim();
+                string text = match.Groups[1].Value.TrimEnd();
                 return new string(text.Reverse().ToArray());
             }
             return new string(input.Reverse().ToArray());
@@ -31,25 +24,25 @@ public static class SolverJailed
         catch { return ""; }
     }
 
-    // Задача steganography: вопрос начинается со строк с римскими цифрами
-    // Каждая строка — римская цифра = номер буквы в алфавите (I=A, II=B, ...)
+    // steganography: первая строка — римская цифра N
+    // остальные строки — текст, нужно вернуть N-е слово из всего текста
     public static string SolveSteganography(string input)
     {
         try
         {
-            var lines = input.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            var sb = new StringBuilder();
-            foreach (var line in lines)
-            {
-                string trimmed = line.Trim();
-                // Пропускаем строки, которые не являются римскими цифрами
-                if (!Regex.IsMatch(trimmed, @"^[IVXLCDMivxlcdm]+$"))
-                    break;
-                int value = RomanToInt(trimmed.ToUpper());
-                if (value >= 1 && value <= 26)
-                    sb.Append((char)('A' + value - 1));
-            }
-            return sb.ToString();
+            var lines = input.Split('\n');
+            string firstLine = lines[0].Trim();
+            int n = RomanToInt(firstLine.ToUpper());
+
+            // Собираем все слова из остальных строк
+            var allWords = lines
+                .Skip(1)
+                .SelectMany(line => line.Trim().Split(new char[]{' '}, StringSplitOptions.RemoveEmptyEntries))
+                .ToArray();
+
+            if (n >= 1 && n <= allWords.Length)
+                return allWords[n - 1];
+            return "";
         }
         catch { return ""; }
     }
@@ -64,12 +57,9 @@ public static class SolverJailed
         int result = 0;
         for (int i = 0; i < s.Length; i++)
         {
-            int cur = map[s[i]];
-            int next = (i + 1 < s.Length) ? map[s[i + 1]] : 0;
-            if (cur < next)
-                result -= cur;
-            else
-                result += cur;
+            int cur = map.ContainsKey(s[i]) ? map[s[i]] : 0;
+            int next = (i + 1 < s.Length && map.ContainsKey(s[i + 1])) ? map[s[i + 1]] : 0;
+            result += cur < next ? -cur : cur;
         }
         return result;
     }
